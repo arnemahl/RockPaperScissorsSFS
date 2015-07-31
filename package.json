@@ -1,0 +1,26 @@
+{
+  "name": "rtsbalancetest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "gulp": "^3.9.0",
+    "gulp-concat": "^2.6.0",
+    "gulp-connect": "^2.2.0",
+    "gulp-fixmyjs": "^1.0.2",
+    "gulp-if": "^1.2.5",
+    "gulp-jshint": "^1.11.2",
+    "gulp-rename": "^1.2.2",
+    "gulp-uglify": "^1.2.0",
+    "gulp-util": "^3.0.6",
+    "yargs": "^3.15.0"
+  },
+  "dependencies": {
+    "gulp-install": "^0.4.0"
+  }
+}
