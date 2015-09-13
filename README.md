@@ -1,3 +1,3 @@
 # Strategy Fitness Simulation
 
-It's complicated.
+Adapted for Rock-Paper-Scissors
