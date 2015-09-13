@@ -4,6 +4,8 @@ var createPlayer = function(scount, playerName) {
 
 	/* scount = number of strategies */
 
+	var gamesPlayed = 0;
+
 	// a preference for each strategy (sum of all prefences should be 1)
 	var preferences = (function() {
 
@@ -78,16 +80,22 @@ var createPlayer = function(scount, playerName) {
 	// update preference based on outcome of a game
 	var updatePreference = (function() {
 
-		// temperature: changes preferences faster at higher temperature
-		// declines toward 0
-		var temperature = .2;
-		var updateTemperature = (function() {
-			var tmin = 0.05;
-			var tscl = 0.01;
-			return function() {
+		// temperature: preferences change faster at higher temperature.
+		// temperature declines toward tmin, at a rate set by tscl.
+		var temperature, 
+			updateTemperature;
+		
+		(function() {
+			var sst = System.parameters.preferenceUpdate.temperature;
+			var tmin = sst.min;
+			var tscl = sst.scl;
+			
+			temperature = sst.start;
+			updateTemperature = function() {
 				temperature -= (temperature - tmin) * tscl;
 			}
 		})();
+		
 
 		var updateOne = function(strategy, win) {
 
@@ -113,7 +121,10 @@ var createPlayer = function(scount, playerName) {
 			rebalancePreferences();
 		}
 
-		return updateBoth;
+		if (System.parameters.preferenceUpdate.method === 'one')
+			return updateOne;
+		else if (System.parameters.preferenceUpdate.method === 'both')
+			return updateBoth;
 
 	})();
 
@@ -126,6 +137,7 @@ var createPlayer = function(scount, playerName) {
 
 			// Main player function
 			play: function() {
+				gamesPlayed++;
 				selectedStrategy = selectStrategy();
 
 				return {
@@ -143,6 +155,10 @@ var createPlayer = function(scount, playerName) {
 
 			getName: function() {
 				return playerName;
+			},
+
+			getGamesPlayed: function() {
+				return gamesPlayed;
 			}
 
 		};

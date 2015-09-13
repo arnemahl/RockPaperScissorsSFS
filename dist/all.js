@@ -1,12 +1,32 @@
+var thousand = 1000, million = 1000000;
 var System = {
   // System parameters
   parameters: {
     // Number of strategies
-    scount: 4,
+    scount: 3,
+    /* MUST BE 3 FOR ROCK-PAPER-SCISSORS */
     // Number of players
-    playerCount: 4,
+    playerCount: 450,
     // Number of games
-    gameCount: 3 * 1000 + 1  // +1 so simulation ends on an even number
+    gameCount: 250 * thousand + 1,
+    // +1 so simulation ends on an even number
+    // Number of times the current state will be logged
+    logCount: 250,
+    // How to update preference
+    preferenceUpdate: {
+      method: 'one',
+      // 'one' or 'both'
+      temperature: {
+        start: 0.2,
+        min: 0.01,
+        scl: 0.05
+      }
+    },
+    simulation: {
+      nofRuns: 1,
+      minimumShuffling: true
+    },
+    output: { timeOnly: true }
   },
   // Generated variables
   generated: {},
@@ -29,7 +49,7 @@ function run(repetitions) {
   /* Simulate */
   simulate(p.gameCount, S.players, g.strategyMatrix);
   /* Output */
-  log.all(p.scount, g.strategyMatrix, S.players);
+  log.output_all(p.scount, g.strategyMatrix, S.players);
   /* Repeat simulation with same parameters and generatd variables */
   repeat = function (repetitions) {
     // return if repetitions is undefined or has reached 0
@@ -40,7 +60,7 @@ function run(repetitions) {
     /* Simulate */
     simulate(p.gameCount, players, g.strategyMatrix);
     /* Output */
-    log.minimal(p.scount, players);
+    log.output_minimal(p.scount, players);
     // Recursive repeat
     repeat(--repetitions);
   };
@@ -49,12 +69,11 @@ function run(repetitions) {
 }
 window.onload = function () {
   var graph = graph_init();
-  run();
-  graph.draw();
-  fbSaveData('test');
+  run(System.parameters.nofRuns);
+  graph.draw();  // fbSaveData('test'); /* Don't save for RPS */
 };
 fbSaveData = function (notes) {
-  var ref = new Firebase('https://rts-stats.firebaseio.com/');
+  var ref = new Firebase('https://rock-paper-scissors-stats.firebaseio.com/');
   ref.push({
     // System parameters & variables
     System: {
@@ -67,6 +86,39 @@ fbSaveData = function (notes) {
     notes: notes
   });
 };
+var Timer = function () {
+  var time = {};
+  return {
+    start: function () {
+      time.t0 = new Date().valueOf();
+      delete time.dt;
+    },
+    stop: function () {
+      time.dt = new Date().valueOf() - time.t0;
+    },
+    elapsed: function () {
+      if (time.dt)
+        return time.dt;
+      else
+        return new Date().valueOf() - time.t0;
+    }
+  };
+}();
+// Timer = {
+// 	start: function() { console.log('Hello!'); },
+// 	stop: function() { console.log('Stopped!'); },
+// 	elapsed: function() { console.log('Hi?'); return 'asdf'; }
+// }
+StringHelper = {
+  addSpacePadding: function (string, length) {
+    var addCount = length - string.length;
+    var spaceString = '        ';
+    while (spaceString.length < addCount) {
+      spaceString = spaceString + spaceString;
+    }
+    return string + spaceString.substring(0, addCount);
+  }
+};
 var log = {
   strategyMatrix: function (scount, strategyMatrix, strategyEfficiency) {
     // log matrix
@@ -76,7 +128,7 @@ var log = {
         // val = strategyMatrix[i][j];
         val = strategyMatrix[j][i];
         // NB: Inverted
-        string += val.toFixed(2) + '   ';
+        string += val + '   ';
       }
       // if (typeof strategyEfficiency !== 'undefined') {
       // 	string += '\|   '+strategyEfficiency[i].toFixed(2);
@@ -116,24 +168,48 @@ var log = {
     for (i = 0; i < avg.length; i++) {
       string += avg[i].toFixed(2) + '   ';
     }
-    string += '\n';
     return string;
   },
   preferences: function (scount, players) {
     var outString = log.playerPreference(scount, players) + '\n' + log.averagePreference(scount, players) + '-------------------------------------------------';
     console.log(outString);
   },
-  minimal: function (scount, players) {
-    var outString = log.averagePreference(scount, players) + '-------------------------------------------------';
+  gamesPlayed: function (players) {
+    var string = 'Games played\n';
+    Object.keys(players).forEach(function (key) {
+      var player = players[key];
+      string += StringHelper.addSpacePadding(player.getName(), 8) + player.getGamesPlayed() + '\n';
+    });
+    string += '-------------------------------------------------';
+    return string;
+  },
+  elapsedTime: function () {
+    return 'Finished in ' + Timer.elapsed() + ' ms';
+  },
+  output_minimal: function (scount, players) {
+    if (System.parameters.output.timeOnly) {
+      log.output_timeOnly();
+      return;
+    }
+    var outString = log.averagePreference(scount, players) + '\n' + '-------------------------------------------------' + '\n' + log.elapsedTime();
     console.log(outString);
   },
-  all: function (scount, strategyMatrix, players) {
-    var outString = log.strategyMatrix(scount, strategyMatrix) + '\n' + log.strategyEfficiency(scount, strategyMatrix) + '\n' + log.playerPreference(scount, players) + '\n' + log.averagePreference(scount, players) + '-------------------------------------------------';
+  output_all: function (scount, strategyMatrix, players) {
+    if (System.parameters.output.timeOnly) {
+      log.output_timeOnly();
+      return;
+    }
+    //'\n'+ log.gamesPlayed(players)
+    var outString = log.strategyMatrix(scount, strategyMatrix) + '\n' + log.strategyEfficiency(scount, strategyMatrix) + '\n' + log.playerPreference(scount, players) + '\n' + log.averagePreference(scount, players) + '\n' + '-------------------------------------------------' + '\n' + log.elapsedTime();
     console.log(outString);
+  },
+  output_timeOnly: function () {
+    console.log(log.elapsedTime());
   }
 };
 var createPlayer = function (scount, playerName) {
   /* scount = number of strategies */
+  var gamesPlayed = 0;
   // a preference for each strategy (sum of all prefences should be 1)
   var preferences = function () {
     var preferences = [];
@@ -182,16 +258,18 @@ var createPlayer = function (scount, playerName) {
   }();
   // update preference based on outcome of a game
   var updatePreference = function () {
-    // temperature: changes preferences faster at higher temperature
-    // declines toward 0
-    var temperature = 0.2;
-    var updateTemperature = function () {
-      var tmin = 0.05;
-      var tscl = 0.01;
-      return function () {
+    // temperature: preferences change faster at higher temperature.
+    // temperature declines toward tmin, at a rate set by tscl.
+    var temperature, updateTemperature;
+    (function () {
+      var sst = System.parameters.preferenceUpdate.temperature;
+      var tmin = sst.min;
+      var tscl = sst.scl;
+      temperature = sst.start;
+      updateTemperature = function () {
         temperature -= (temperature - tmin) * tscl;
       };
-    }();
+    }());
     var updateOne = function (strategy, win) {
       if (win) {
         preferences[strategy] *= 1 + temperature;
@@ -207,7 +285,10 @@ var createPlayer = function (scount, playerName) {
       updateTemperature();
       rebalancePreferences();
     };
-    return updateBoth;
+    if (System.parameters.preferenceUpdate.method === 'one')
+      return updateOne;
+    else if (System.parameters.preferenceUpdate.method === 'both')
+      return updateBoth;
   }();
   // player object
   var player = function () {
@@ -215,6 +296,7 @@ var createPlayer = function (scount, playerName) {
     return {
       // Main player function
       play: function () {
+        gamesPlayed++;
         selectedStrategy = selectStrategy();
         return {
           // selected strategy for the game
@@ -229,6 +311,9 @@ var createPlayer = function (scount, playerName) {
       },
       getName: function () {
         return playerName;
+      },
+      getGamesPlayed: function () {
+        return gamesPlayed;
       }
     };
   }();
@@ -260,6 +345,7 @@ function simulate(gameCount, players_in, strategyMatrix) {
     // If 2 players, don't shuffle
     if (array.length === 2) {
       return function () {
+        return array;  /* No need to shuffle when it's 2 players*/
       };
     }
     // Knuth shuffle, 
@@ -282,19 +368,41 @@ function simulate(gameCount, players_in, strategyMatrix) {
   }(players);
   // the array to be shuffled is players
   // 'Simulate' whether strategy A beats strategy B
-  var winA = function () {
-    var prob, random;
+  var outcomeForA = function () {
+    var outocme;
     return function (sa, sb) {
-      prob = strategyMatrix[sa][sb];
-      random = Math.random();
-      return random < prob;
+      outocme = strategyMatrix[sa][sb];
+      return outocme;
     };
+  }();
+  var updatePreferences = function () {
+    if (System.parameters.preferenceUpdate.method === 'one') {
+      /* only preference of their own strategy */
+      var winA;
+      return function (outcomeForA, pa, pb) {
+        if (outcomeForA !== 'tie') {
+          pa.callback(pa.strategy, outcomeForA === 'win');
+          pb.callback(pb.strategy, outcomeForA === 'lose');
+        }
+      };
+    } else if (System.parameters.preferenceUpdate.method === 'both') {
+      /* updte preference of both strategies */
+      return function (outcomeForA, pa, pb) {
+        if (outcomeForA === 'win') {
+          pa.callback(pa.strategy, pb.strategy);
+          pb.callback(pa.strategy, pb.strategy);
+        } else if (outcomeForA === 'lose') {
+          pa.callback(pb.strategy, pa.strategy);
+          pb.callback(pb.strategy, pa.strategy);
+        }
+      };
+    }
   }();
   // Run simulation
   var runSimulation = function () {
     var g, pa, pb, wa, players;
-    var logCount = 300;
-    logInterval = Math.round(gameCount / logCount);
+    var logCount = Math.min(System.parameters.logCount, gameCount);
+    var logInterval = Math.round(gameCount / logCount);
     // repeat for <gameCount> number of games
     for (g = 0; g < gameCount; g++) {
       // Stats: collect
@@ -307,21 +415,44 @@ function simulate(gameCount, players_in, strategyMatrix) {
       pa = players[0].play();
       pb = players[1].play();
       // does player A win?
-      wa = winA(pa.strategy, pb.strategy);
+      oa = outcomeForA(pa.strategy, pb.strategy);
       // let players update preferences
-      /* only their own */
-      // pa.callback(pa.strategy, wa);
-      // pb.callback(pb.strategy, !wa); // winB = !winA
-      /* updte both */
-      if (wa) {
-        pa.callback(pa.strategy, pb.strategy);
-        pb.callback(pa.strategy, pb.strategy);
-      } else {
-        pa.callback(pb.strategy, pa.strategy);
-        pb.callback(pb.strategy, pa.strategy);
+      updatePreferences(oa, pa, pb);
+    }
+  };
+  // Run simulation but with less shuffling
+  var runSimulation_minimumShuffling = function () {
+    var g, i, j, pa, pb, wa, players;
+    var logCount = Math.min(System.parameters.logCount, gameCount);
+    var logInterval = Math.round(gameCount / logCount);
+    var x = 0;
+    // repeat for <gameCount> number of games
+    for (g = 0; g < gameCount;) {
+      // shuffle players
+      players = shufflePlayers();
+      for (i = 0; i < players.length - 1 && g < gameCount; i++) {
+        for (j = 0; j < players.length && g < gameCount; j++, g++) {
+          // Stats: collect
+          if (g % logInterval === 0) {
+            Statistics.collect(g);
+          }
+          // pick the two first ones
+          pa = players[i].play();
+          pb = players[i].play();
+          // does player A win?
+          oa = outcomeForA(pa.strategy, pb.strategy);
+          // let players update preferences
+          updatePreferences(oa, pa, pb);
+        }
       }
     }
-  }();
+  };
+  Timer.start();
+  if (System.parameters.simulation.minimumShuffling)
+    runSimulation_minimumShuffling();
+  else
+    runSimulation();
+  Timer.stop();
 }
 var Statistics = {
   data: {
@@ -380,37 +511,34 @@ var Strategy = {};
     return winA;
   };
   Strategy.generateMatrix = function (scount) {
-    var i, j, row, matrix = [];
-    winA = winA_init(scount);
-    for (i = 0; i < scount; i++) {
-      row = [];
-      matrix[i] = row;
-      // symmetric probability
-      // win-rate = 1 - 'lose-rate'
-      for (j = 0; j < i; j++) {
-        row[j] = 1 - matrix[j][i];
-      }
-      // 50% probability vs self
-      row[j++] = 0.5;
-      // generate win-rate against unencountered strategies
-      for (; j < scount; j++) {
-        row[j] = winA(i, j);  // better chance of winning for an overall better strategy
-      }
-    }
+    var matrix = [
+      // rock   paper   scissors
+      [
+        'tie',
+        'lose',
+        'win'
+      ],
+      // rock
+      [
+        'win',
+        'tie',
+        'lose'
+      ],
+      // paper
+      [
+        'lose',
+        'win',
+        'tie'
+      ]  // scissors
+    ];
     return matrix;
   };
   Strategy.getUnbiasedEfficiency = function (scount, matrix) {
-    /* Win rate against a randomly drawn strategy, as opposed to against biased strategy selection */
-    var i, j, seff = [];
-    for (i = 0; i < scount; i++) {
-      seff[i] = 0;
-      //-0.5; // -0.5 because it's got 0.5 against itself
-      for (j = 0; j < scount; j++) {
-        seff[i] += matrix[i][j];
-      }
-      seff[i] /= scount;
-    }
-    return seff;
+    return [
+      1 / 3,
+      1 / 3,
+      1 / 3
+    ];
   };
   Strategy.getAveragePreference = function (scount, players) {
     var i, j, pcount = players.length, pp, avg = [];

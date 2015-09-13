@@ -1,7 +1,7 @@
 
 fbSaveData = function(notes) {
 
-	var ref = new Firebase("https://rts-stats.firebaseio.com/");
+	var ref = new Firebase("https://rock-paper-scissors-stats.firebaseio.com/");
 
 	ref.push({
 

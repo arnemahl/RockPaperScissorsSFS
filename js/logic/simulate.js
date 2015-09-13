@@ -9,7 +9,7 @@ function simulate(gameCount, players_in, strategyMatrix) {
 
 		// If 2 players, don't shuffle
 		if (array.length === 2) {
-			return function() { /* No need to shuffle when it's 2 players*/ };
+			return function() { return array; /* No need to shuffle when it's 2 players*/ };
 		}
 
 
@@ -43,27 +43,51 @@ function simulate(gameCount, players_in, strategyMatrix) {
 
 
 	// 'Simulate' whether strategy A beats strategy B
-	var winA = (function() {
+	var outcomeForA = (function() {
 
-		var prob, random;
+		var outocme;
 		
 		return function (sa, sb) {
 
-			prob = strategyMatrix[sa][sb];
-			random = Math.random();
+			outocme = strategyMatrix[sa][sb];
 
-			return random < prob;
+			return outocme;
 		}
 
 	})();
 
+	var updatePreferences = (function() {
+		if (System.parameters.preferenceUpdate.method === 'one') {
+			/* only preference of their own strategy */
+			var winA;
+			return function(outcomeForA, pa, pb) {
+				if (outcomeForA !== 'tie') {
+					pa.callback(pa.strategy, outcomeForA === 'win');
+					pb.callback(pb.strategy, outcomeForA === 'lose');
+				}
+			}
+
+		} else if (System.parameters.preferenceUpdate.method === 'both') {
+			/* updte preference of both strategies */
+			return function(outcomeForA, pa, pb) {
+				if (outcomeForA === 'win') {
+					pa.callback(pa.strategy, pb.strategy);
+					pb.callback(pa.strategy, pb.strategy);
+				} else if (outcomeForA === 'lose') {
+					pa.callback(pb.strategy, pa.strategy);
+					pb.callback(pb.strategy, pa.strategy);
+				}
+			}
+
+		}
+	})();
 
 	// Run simulation
 	var runSimulation = (function() {
 
 		var g, pa, pb, wa, players;
-		var logCount = 300;
-			logInterval = Math.round(gameCount / logCount);
+		var logCount = Math.min(System.parameters.logCount, gameCount);
+		var logInterval = Math.round(gameCount / logCount);
 
 		// repeat for <gameCount> number of games
 		for (g = 0; g < gameCount; g++) {
@@ -81,24 +105,64 @@ function simulate(gameCount, players_in, strategyMatrix) {
 			pb = players[1].play();
 
 			// does player A win?
-			wa = winA(pa.strategy, pb.strategy);
+			oa = outcomeForA(pa.strategy, pb.strategy);
 
 			// let players update preferences
-			/* only their own */
-			// pa.callback(pa.strategy, wa);
-			// pb.callback(pb.strategy, !wa); // winB = !winA
+			updatePreferences(oa, pa, pb);
 
-			/* updte both */
-			if (wa) {
-				pa.callback(pa.strategy, pb.strategy);
-				pb.callback(pa.strategy, pb.strategy);
-			} else {
-				pa.callback(pb.strategy, pa.strategy);
-				pb.callback(pb.strategy, pa.strategy);	
+		}
+
+	});
+
+	// Run simulation but with less shuffling
+	var runSimulation_minimumShuffling = (function() {
+
+		var g, i, j, pa, pb, wa, players;
+		var logCount = Math.min(System.parameters.logCount, gameCount);
+		var logInterval = Math.round(gameCount / logCount);
+
+		var x = 0;
+
+		// repeat for <gameCount> number of games
+		for (g = 0; g < gameCount; /**/) {
+
+			// shuffle players
+			players = shufflePlayers();
+
+			for (i = 0; (i < players.length-1) && (g < gameCount); i++) {
+				for (j = 0; (j < players.length) && (g < gameCount); j++, g++ ) {
+
+					// Stats: collect
+					if (g % logInterval === 0) {
+						Statistics.collect(g);
+					}
+
+					// pick the two first ones
+					pa = players[i].play();
+					pb = players[i].play();
+
+					// does player A win?
+					oa = outcomeForA(pa.strategy, pb.strategy);
+
+					// let players update preferences
+					updatePreferences(oa, pa, pb);
+
+				}
+
 			}
 
 		}
 
-	})();
+	});
+
+
+	Timer.start();
+
+	if (System.parameters.simulation.minimumShuffling)
+		runSimulation_minimumShuffling();
+	else
+		runSimulation();
+
+	Timer.stop();
 
 }
